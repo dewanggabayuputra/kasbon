@@ -1,22 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { AlertCircle, ArrowRight } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const message = searchParams.get('message');
+    if (message) {
+      setSuccess(message);
+    }
+
+    const confirmed = searchParams.get('email_confirmed');
+    if (confirmed === 'true') {
+      setSuccess('Email berhasil diverifikasi! Silakan login');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
+    setSuccess('');
 
     try {
       const supabase = createClient();
@@ -26,9 +40,14 @@ export default function LoginPage() {
       });
 
       if (signInError) {
-        setError(signInError.message === 'Invalid login credentials'
-          ? 'Email atau password salah'
-          : 'Gagal login, coba lagi');
+        if (signInError.message === 'Email not confirmed' || 
+            signInError.message.includes('email')) {
+          setError('Email belum diverifikasi. Silakan cek email untuk klik link verifikasi');
+        } else if (signInError.message === 'Invalid login credentials') {
+          setError('Email atau password salah');
+        } else {
+          setError('Gagal login, coba lagi');
+        }
       } else {
         router.push('/dashboard');
       }
@@ -53,6 +72,13 @@ export default function LoginPage() {
               <div className="flex gap-3 bg-red-50 border border-red-200 rounded-lg p-3">
                 <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div className="flex gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-green-700">{success}</p>
               </div>
             )}
 
@@ -105,5 +131,21 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <p className="text-gray-600">Memuat...</p>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <LoginContent />
+    </Suspense>
   );
 }

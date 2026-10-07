@@ -1,22 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { AlertCircle, ArrowRight } from 'lucide-react';
+import { AlertCircle, ArrowRight, Mail } from 'lucide-react';
 
-export default function SignupPage() {
+function SignupContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const message = searchParams.get('pending_confirm');
+    if (message) {
+      setSuccess('Silakan cek email untuk verifikasi sebelum login');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (password !== confirmPassword) {
       setError('Password tidak cocok');
@@ -32,17 +42,26 @@ export default function SignupPage() {
 
     try {
       const supabase = createClient();
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
       });
 
       if (signUpError) {
-        setError(signUpError.message === 'User already registered'
-          ? 'Email sudah terdaftar'
-          : 'Gagal mendaftar, coba lagi');
+        if (signUpError.message === 'User already registered') {
+          setError('Email sudah terdaftar');
+        } else {
+          setError('Gagal mendaftar, coba lagi');
+        }
+      } else if (data.user && data.session === null) {
+        // User created but email confirmation required
+        setSuccess('Pendaftaran berhasil! Silakan cek email untuk verifikasi');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
       } else {
-        router.push('/auth/login?message=Pendaftaran berhasil, silakan login');
+        // Email confirmation disabled, auto login
+        router.push('/dashboard');
       }
     } catch {
       setError('Terjadi kesalahan, coba lagi');
@@ -65,6 +84,18 @@ export default function SignupPage() {
               <div className="flex gap-3 bg-red-50 border border-red-200 rounded-lg p-3">
                 <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div className="flex gap-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                <Mail className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-green-700 font-medium">{success}</p>
+                  <p className="text-xs text-green-600 mt-1">
+                    Cek inbox (dan spam) untuk link verifikasi dari Supabase
+                  </p>
+                </div>
               </div>
             )}
 
@@ -132,5 +163,21 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <p className="text-gray-600">Memuat...</p>
+    </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <SignupContent />
+    </Suspense>
   );
 }
